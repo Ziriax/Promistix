@@ -1,0 +1,17 @@
+{
+  "name": "Promistix",
+  "version": "0.1.0",
+  "description": "Promistix",
+  "main": "Promistix.js",
+  "keywords": ["promises", "promises-aplus"],
+  "implements": ["Promises/A+ 1.1.0"],
+  "license": "MIT",
+  "repository": "Ziriax/Promistix",
+  "author": {
+    "name": "Peter Verswyvelen",
+    "email": "bugfact@gmail.com"
+  },
+  "dependencies": {
+    "promises-aplus-tests": "^2.1.1"
+  }
+}
