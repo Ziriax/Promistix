@@ -50,9 +50,9 @@
 		var def = empty_list({
 			state: WAIT,
 			value: "",
-			promise: { then: function(res, rej) { return then(def, res, rej); } },
-			resolve: function(value) { transit(def, DONE, value); },
-			reject: function(value) { transit(def, FAIL, value); }
+			promise: { then: function (res, rej) { return then(def, res, rej); } },
+			resolve: function (value) { transit(def, DONE, value); },
+			reject: function (value) { transit(def, FAIL, value); }
 		});
 		return def;
 	};
@@ -73,14 +73,14 @@
 		return then.deferred.promise;
 	}
 
-	function then_transit(def, id, state, value) {
+	function pipe(def, id, state, value) {
 		if (def.state === id) {
 			def.state = WAIT;
 			transit(def, state, value);
 		}
 	}
 
-	function switch_to(def, state, value) {
+	function fill(def, state, value) {
 		def.value = value;
 		def.state = state;
 		schedule(def);
@@ -101,13 +101,13 @@
 					try {
 						then.call(value,
 							function (next) {
-								then_transit(def, id, DONE, next);
+								pipe(def, id, DONE, next);
 							}, function (next) {
-								then_transit(def, id, FAIL, next);
+								pipe(def, id, FAIL, next);
 							});
 					} catch (error1) {
 						if (def.state === id)
-							switch_to(def, FAIL, error1);
+							fill(def, FAIL, error1);
 					}
 					return;
 				}
@@ -116,7 +116,7 @@
 				state = FAIL;
 			}
 		}
-		switch_to(def, state, value);
+		fill(def, state, value);
 	}
 
 	var Promistix = {
