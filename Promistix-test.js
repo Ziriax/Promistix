@@ -1,6 +1,6 @@
 var promisesAplusTests = require("promises-aplus-tests");
 
-var Promistix = require("./Promistix-min.js");
+var Promistix = require("./Promistix.js");
 
 promisesAplusTests({
     deferred: Promistix.pending

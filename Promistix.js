@@ -5,6 +5,54 @@
 	var last_pipe_state_id = 3;
 
 	/** @constructor */
+	function Thunk(def) {
+		this.state = def.state;
+		this.value = def.value;
+		this.thens = def.head;
+	}
+
+	Thunk.queued = [];
+
+	Thunk.queue = function (def) {
+		var thunk = new Thunk(def);
+		def.head = def.tail = null;
+		Thunk.queued.push(thunk);
+
+		if (Thunk.queued.length === 1)
+			Promistix.schedule(Thunk.run_queued);
+	}
+
+	Thunk.run_queued = function () {
+		var q = Thunk.queued;
+		Thunk.queued = [];
+		for (var i = 0; i < q.length; i++) {
+			q[i].invoke();
+		}
+	}
+
+	Thunk.prototype.invoke = function () {
+		var then = this.thens;
+		var state = this.state;
+		var value = this.value;
+		while (then) {
+			var cfn = then[state],
+                next_value = value,
+                next_state = state;
+			if (typeof cfn === "function") {
+				try {
+					next_value = cfn(next_value);
+					next_state = DONE;
+				} catch (error) {
+					next_value = error;
+					next_state = FAIL;
+				}
+			}
+			then.deferred.transit(next_state, next_value);
+			then = then.next;
+		};
+	}
+
+	/** @constructor */
 	function Deferred() {
 		this.state = WAIT;
 		this.head = this.tail = null;
@@ -17,25 +65,6 @@
 		};
 	};
 
-	function call_thens(state, value, then) {
-		while (then) {
-            var cfn = then[state],
-                next_value = value,
-                next_state = state;
-            if (typeof cfn === "function") {
-                try {
-                	next_value = cfn(next_value);
-                    next_state = DONE;
-                } catch (error) {
-                    next_value = error;
-                    next_state = FAIL;
-                }
-            }
-            then.deferred.transit(next_state, next_value);
-			then = then.next;
-		};
-    }
-
     function then_transit(id, state, value) {
         if (this.state === id) {
             this.state = WAIT;
@@ -45,13 +74,7 @@
 
     Deferred.prototype = {
     	asap: function () {
-		    var state = this.state,
-			    value = this.value,
-			    thens = this.head;
-            this.head = this.tail = null;
-            Promistix.schedule(function() {
-	            call_thens(state, value, thens);
-            });
+    		var thunk = Thunk.queue(this);
         },
         switchTo: function(state, value) {
         	this.value = value;
