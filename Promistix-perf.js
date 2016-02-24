@@ -1,5 +1,5 @@
-Promise = require("./Promistix.js");
-//Promise = require("bluebird");
+//Promise = require("./Promistix.js");
+Promise = require("bluebird");
 
 var dones = 0;
 var fails = 0;

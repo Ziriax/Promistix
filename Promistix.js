@@ -4,52 +4,48 @@
 	var FAIL = 2;
 	var last_pipe_state_id = 3;
 
-	/** @constructor */
-	function Thunk(def) {
-		this.state = def.state;
-		this.value = def.value;
-		this.thens = def.head;
-	}
+	var queues = [[null], [null]];
+	var counts = [0, 0];
+	var iqueue = 0;
 
-	Thunk.queued = [];
+	function run_queued() {
+		var queue = queues[iqueue];
+		var count = counts[iqueue];
+		counts[iqueue] = 0;
 
-	Thunk.queue = function (def) {
-		var thunk = new Thunk(def);
-		def.head = def.tail = null;
-		Thunk.queued.push(thunk);
+		iqueue ^= 1;
 
-		if (Thunk.queued.length === 1)
-			Promistix.schedule(Thunk.run_queued);
-	}
-
-	Thunk.run_queued = function () {
-		var q = Thunk.queued;
-		Thunk.queued = [];
-		for (var i = 0; i < q.length; i++) {
-			q[i].invoke();
+		for (var i = 0; i < count; i++) {
+			var entry = queue[i];
+			queue[i] = null;
+			var state = entry.state;
+			var value = entry.value;
+			var then = entry.thens;
+			while (then) {
+				var cfn = then[state],
+					next_value = value,
+					next_state = state;
+				if (typeof cfn === "function") {
+					try {
+						next_value = cfn(next_value);
+						next_state = DONE;
+					} catch (error) {
+						next_value = error;
+						next_state = FAIL;
+					}
+				}
+				then.deferred.transit(next_state, next_value);
+				then = then.next;
+			};
 		}
 	}
 
-	Thunk.prototype.invoke = function () {
-		var then = this.thens;
-		var state = this.state;
-		var value = this.value;
-		while (then) {
-			var cfn = then[state],
-                next_value = value,
-                next_state = state;
-			if (typeof cfn === "function") {
-				try {
-					next_value = cfn(next_value);
-					next_state = DONE;
-				} catch (error) {
-					next_value = error;
-					next_state = FAIL;
-				}
-			}
-			then.deferred.transit(next_state, next_value);
-			then = then.next;
-		};
+	function schedule(def) {
+		var thunk = { state: def.state, value: def.value, thens: def.head };
+		def.head = def.tail = null;
+		queues[iqueue][counts[iqueue]++] = thunk;
+		if (counts[iqueue] === 1)
+			Promistix.schedule(run_queued);
 	}
 
 	/** @constructor */
@@ -73,13 +69,10 @@
     }
 
     Deferred.prototype = {
-    	asap: function () {
-    		var thunk = Thunk.queue(this);
-        },
         switchTo: function(state, value) {
         	this.value = value;
             this.state = state;
-            this.asap();
+            schedule(this);
         },
         transit: function (state, value) {
 	        if (this.state !== WAIT)
@@ -125,8 +118,8 @@
 	        } else {
 		        this.head = this.tail = then;
 	        }
-        	if (this.state !== WAIT)
-            	this.asap();
+	        if (this.state !== WAIT)
+	        	schedule(this);
 			return then.deferred.promise;
         }
     }
