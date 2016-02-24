@@ -1,4 +1,4 @@
-Promise = require("./Promistix.js");
+Promise = require("./Promistix-min.js");
 //Promise = require("bluebird");
 
 function benchmark() {
@@ -15,7 +15,7 @@ function benchmark() {
 	for (var i = 0; i < 200000; ++i) {
 		var d = Promise.pending();
 		d.promise.then(() => ++dones, () => ++fails);
-		switch (i % 1) {
+		switch (i % 4) {
 			case 0:
 				d.resolve(42);
 				break;
@@ -23,10 +23,10 @@ function benchmark() {
 				d.reject("foo");
 				break;
 			case 2:
-				d.resolve("bar");
+				d.resolve({bar:13});
 				break;
 			case 3:
-				d.reject(666);
+				d.reject(true);
 				break;
 		}
 	}

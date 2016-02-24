@@ -4,19 +4,20 @@
 	var FAIL = 2;
 	var last_pipe_state_id = 3;
 
+	/** @constructor */
 	function Deferred() {
+		this.state = WAIT;
+		this.head = this.tail = null;
+		this.value = "";
 		var self = this;
-		self.state = WAIT;
-		self.head = this.tail = null;
-		self.value = "";
-		self.promise = {
+		this.promise = {
 			then: function(res, rej) {
 				 return self.then(res, rej);
 			}
 		};
 	};
 
-    function call_thens(state, value, then) {
+	function call_thens(state, value, then) {
 		while (then) {
             var cfn = then[state],
                 next_value = value,
@@ -114,7 +115,7 @@
 			return new Deferred();
 		},
 		schedule: setImmediate || (process && process.nextTick) || function() {
-			throw new Error("Promistix.schedule must be set to process.nextTick in a nodejs environment, or similar function");
+			throw new Error("Promistix.schedule must be set to setImmediate in a nodejs environment, or a similar function");
 		}
 	};
 
