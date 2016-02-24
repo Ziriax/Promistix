@@ -4,20 +4,15 @@
 	var FAIL = 2;
 	var last_pipe_state_id = 3;
 
-	var queues = [[null], [null]];
-	var counts = [0, 0];
-	var iqueue = 0;
+	var queue = [];
 
 	function run_queued() {
-		var queue = queues[iqueue];
-		var count = counts[iqueue];
-		counts[iqueue] = 0;
+		var q = queue;
+		var l = q.length;
+		queue = [];
 
-		iqueue ^= 1;
-
-		for (var i = 0; i < count; i++) {
-			var entry = queue[i];
-			queue[i] = null;
+		for (var i = 0; i < l; i++) {
+			var entry = q[i];
 			var state = entry.state;
 			var value = entry.value;
 			var then = entry.thens;
@@ -34,103 +29,96 @@
 						next_state = FAIL;
 					}
 				}
-				then.deferred.transit(next_state, next_value);
+				transit(then.deferred, next_state, next_value);
 				then = then.next;
 			};
 		}
 	}
 
+	function deferred() {
+		var def = {
+			state: WAIT,
+			head: null,
+			tail: null,
+			value: "",
+			promise: { then: function (res, rej) { return then(def, res, rej); } },
+			resolve: function (value) { transit(def, DONE, value); },
+			reject: function (value) { transit(def, FAIL, value); }
+		};
+		return def;
+	};
+
 	function schedule(def) {
 		var thunk = { state: def.state, value: def.value, thens: def.head };
 		def.head = def.tail = null;
-		queues[iqueue][counts[iqueue]++] = thunk;
-		if (counts[iqueue] === 1)
+		queue.push(thunk);
+		if (queue.length === 1)
 			Promistix.schedule(run_queued);
 	}
 
-	/** @constructor */
-	function Deferred() {
-		this.state = WAIT;
-		this.head = this.tail = null;
-		this.value = "";
-		var self = this;
-		this.promise = {
-			then: function(res, rej) {
-				 return self.then(res, rej);
+	function then(def, done, fail) {
+		var then = { 1: done, 2: fail, deferred: deferred(), next: null };
+		if (def.tail) {
+			def.tail.next = then;
+			def.tail = then;
+		} else {
+			def.head = def.tail = then;
+		}
+		if (def.state !== WAIT)
+			schedule(def);
+		return then.deferred.promise;
+	}
+
+	function then_transit(def, id, state, value) {
+		if (def.state === id) {
+			def.state = WAIT;
+			transit(def, state, value);
+		}
+	}
+
+	function switch_to(def, state, value) {
+		def.value = value;
+		def.state = state;
+		schedule(def);
+	}
+
+	function transit(def, state, value) {
+		if (def.state !== WAIT)
+			return;
+
+		if (typeof value === "function" || (typeof value === "object" && value !== null)) {
+			try {
+				if (value === def.promise)
+					throw new TypeError("A promise cannot return itself");
+				var then = value.then;
+				if (state === DONE && typeof then === "function") {
+					def.promise.then = then.bind(value);
+					var id = def.state = last_pipe_state_id++;
+					try {
+						then.call(value,
+							function (next) {
+								then_transit(def, id, DONE, next);
+							}, function (next) {
+								then_transit(def, id, FAIL, next);
+							});
+					} catch (error1) {
+						if (def.state === id)
+							switch_to(def, FAIL, error1);
+					}
+					return;
+				}
+			} catch (error2) {
+				value = error2;
+				state = FAIL;
 			}
-		};
-	};
+		}
+		switch_to(def, state, value);
+	}
 
-    function then_transit(id, state, value) {
-        if (this.state === id) {
-            this.state = WAIT;
-            this.transit(state, value);
-        }
-    }
-
-    Deferred.prototype = {
-        switchTo: function(state, value) {
-        	this.value = value;
-            this.state = state;
-            schedule(this);
-        },
-        transit: function (state, value) {
-	        if (this.state !== WAIT)
-	        	return;
-
-            if (typeof value === "function" || (typeof value === "object" && value !== null)) {
-                try {
-                    if (value === this.promise)
-                        throw new TypeError("A promise cannot return itself");
-                    var then = value.then;
-                    if (state === DONE && typeof then === "function") {
-                        this.promise.then = then.bind(value);
-                        var id = this.state = last_pipe_state_id++;
-                        try {
-                            then.call(value, then_transit.bind(this, id, DONE), then_transit.bind(this, id, FAIL));
-                        } catch (error1) {
-                            if (this.state === id)
-	                            this.switchTo(FAIL, error1);
-                        }
-                        return;
-                    }
-                } catch (error2) {
-                    value = error2;
-                    state = FAIL;
-                }
-            }
-            this.switchTo(state, value);
-        },
-
-        resolve: function (value) {
-            this.transit(DONE, value);
-        },
-
-        reject: function (value) {
-            this.transit(FAIL, value);
-        },
-
-        then: function (done, fail) {
-        	var then = { 1: done, 2: fail, deferred: new Deferred(), next: null };
-        	if (this.tail) {
-		        this.tail.next = then;
-		        this.tail = then;
-	        } else {
-		        this.head = this.tail = then;
-	        }
-	        if (this.state !== WAIT)
-	        	schedule(this);
-			return then.deferred.promise;
-        }
-    }
-
-    var Promistix = {
-    	name: "Promistix",
-
-		pending: function() {
-			return new Deferred();
-		},
-		schedule: setImmediate || (process && process.nextTick) || function() {
+	var Promistix = {
+		name: "Promistix",
+		pending: deferred,
+		schedule: setImmediate || (process && process.nextTick) || function () {
 			throw new Error("Promistix.schedule must be set to setImmediate in a nodejs environment, or a similar function");
 		}
 	};
