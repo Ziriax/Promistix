@@ -1,11 +1,9 @@
-require("./Promistix.js");
-
 var promisesAplusTests = require("promises-aplus-tests");
 
-Promistix.schedule = process.nextTick;
+var Promistix = require("./Promistix.js");
 
 promisesAplusTests({
-    deferred: Promistix.deferred
+    deferred: Promistix.pending
 }, {
     reporter: "spec"
 });
