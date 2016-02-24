@@ -1,21 +1,32 @@
 ﻿module.exports = (function () {
-	var WAIT = 0;
-	var DONE = 1;
-	var FAIL = 2;
-	var last_pipe_state_id = 3;
+	function empty_list(list) {
+		list = list || {};
+		list.next = null;
+		list.tail = list;
+		return list;
+	}
 
-	var queue = [];
+	function append_node(list, node) {
+		list.tail.next = node;
+		list.tail = node;
+	}
+
+	var WAIT = 0,
+		DONE = 1,
+		FAIL = 2,
+		last_pipe_state_id = 3,
+		queued_thunks = empty_list();
 
 	function run_queued() {
-		var q = queue;
-		var l = q.length;
-		queue = [];
+		var thunk = queued_thunks.next;
+		empty_list(queued_thunks);
 
-		for (var i = 0; i < l; i++) {
-			var entry = q[i];
-			var state = entry.state;
-			var value = entry.value;
-			var then = entry.thens;
+		while (thunk) {
+			var state = thunk.state,
+				value = thunk.value,
+				then = thunk.thens,
+				thunk = thunk.next;
+
 			while (then) {
 				var cfn = then[state],
 					next_value = value,
@@ -31,39 +42,32 @@
 				}
 				transit(then.deferred, next_state, next_value);
 				then = then.next;
-			};
+			}
 		}
 	}
 
 	function deferred() {
-		var def = {
+		var def = empty_list({
 			state: WAIT,
-			head: null,
-			tail: null,
 			value: "",
-			promise: { then: function (res, rej) { return then(def, res, rej); } },
-			resolve: function (value) { transit(def, DONE, value); },
-			reject: function (value) { transit(def, FAIL, value); }
-		};
+			promise: { then: function(res, rej) { return then(def, res, rej); } },
+			resolve: function(value) { transit(def, DONE, value); },
+			reject: function(value) { transit(def, FAIL, value); }
+		});
 		return def;
 	};
 
 	function schedule(def) {
-		var thunk = { state: def.state, value: def.value, thens: def.head };
-		def.head = def.tail = null;
-		queue.push(thunk);
-		if (queue.length === 1)
+		var thunk = { state: def.state, value: def.value, thens: def.next, next: null };
+		empty_list(def);
+		append_node(queued_thunks, thunk);
+		if (queued_thunks.next === thunk)
 			Promistix.schedule(run_queued);
 	}
 
 	function then(def, done, fail) {
 		var then = { 1: done, 2: fail, deferred: deferred(), next: null };
-		if (def.tail) {
-			def.tail.next = then;
-			def.tail = then;
-		} else {
-			def.head = def.tail = then;
-		}
+		append_node(def, then);
 		if (def.state !== WAIT)
 			schedule(def);
 		return then.deferred.promise;
